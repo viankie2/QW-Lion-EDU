@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { IeltsScores, ToeflScores, University } from './types';
-import { getUniversityRecommendations } from './services/geminiService';
+import { recommendUniversities as getUniversityRecommendations } from './services/geminiService';
 import ScoreInput from './components/ScoreInput';
 import UniversityCard from './components/UniversityCard';
 import { UniversityIcon } from './components/Icons';
