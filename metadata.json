@@ -1,0 +1,5 @@
+{
+  "name": "University Admissions Advisor",
+  "description": "Recommends QS Top 200 universities based on English proficiency scores (IELTS/TOEFL) and provides an estimated application success probability using the Gemini API.",
+  "requestFramePermissions": []
+}
