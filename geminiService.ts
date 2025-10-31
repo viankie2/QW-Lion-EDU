@@ -1,11 +1,11 @@
-import axios from "axios";
+// services/geminiService.ts  —— no-axios, vite-friendly
 
 export type RecommendInput = {
-  score: number;               // 用户分数
-  province?: string;           // 生源地（可选）
-  cityPreference?: string;     // 城市偏好（如：上海/北京/深圳/广州/杭州/成都/海外）
-  subjects?: string[];         // 学科偏好关键词（如：Finance, CS, Econ）
-  vibe?: "S" | "M" | "H";      // 语气强度，默认 M
+  score: number;
+  province?: string;
+  cityPreference?: string;
+  subjects?: string[];
+  vibe?: "S" | "M" | "H";
 };
 
 export type Recommendation = {
@@ -43,20 +43,15 @@ const M_STYLE_GUIDE = `
 {
   "summary": "一段 2-3 句的总评，口吻自然。",
   "recommendations": [
-    { "name": "...", "qsRank": 23, "city": "上海", "country": "中国", "tier": "Match", "rationale": "..." },
-    ...
+    { "name": "...", "qsRank": 23, "city": "上海", "country": "中国", "tier": "Match", "rationale": "..." }
   ]
 }
 `;
 
-/**
- * 生成用于 Qwen 的 prompt，限定 QS200，语气 M，自然有共鸣。
- */
 function buildPrompt(input: RecommendInput): string {
   const { score, province, cityPreference, subjects } = input;
   const subjectText = subjects?.length ? subjects.join(", ") : "未指定";
   const cp = cityPreference || "未指定";
-
   return `
 ${M_STYLE_GUIDE}
 
@@ -71,34 +66,36 @@ ${M_STYLE_GUIDE}
   `.trim();
 }
 
-/**
- * 调用 Cloudflare Pages 本地代理（/_worker.js）中转到 DashScope
- */
-export async function recommendUniversities(input: RecommendInput): Promise<{summary: string, recommendations: Recommendation[]}> {
+export async function recommendUniversities(
+  input: RecommendInput
+): Promise<{ summary: string; recommendations: Recommendation[] }> {
   const prompt = buildPrompt(input);
-  const resp = await axios.post(API_PATH, {
-    model: "qwen-plus",
-    prompt
-  }, {
-    headers: { "Content-Type": "application/json" }
+
+  const resp = await fetch(API_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "qwen-plus", prompt })
   });
 
-  // DashScope returns: { output: { text: string } }
-  const text = resp?.data?.output?.text || "";
-  // Expect the model to return JSON per our strict instruction
+  if (!resp.ok) {
+    const msg = await resp.text().catch(() => "");
+    throw new Error(`Qwen API failed: ${resp.status} ${msg}`);
+  }
+
+  const data = await resp.json().catch(() => ({} as any));
+  const text: string = data?.output?.text || "";
+
   let parsed: any;
   try {
     parsed = JSON.parse(text);
-  } catch (e) {
-    // Fallback: attempt to extract JSON from text
-    const match = text.match(/\{[\s\S]*\}/);
-    parsed = match ? JSON.parse(match[0]) : { summary: "", recommendations: [] };
+  } catch {
+    const m = text.match(/\{[\s\S]*\}/);
+    parsed = m ? JSON.parse(m[0]) : { summary: "", recommendations: [] };
   }
 
-  // Optional post-check: enforce QS <= 200 if model slipped
   const recs = (parsed.recommendations || []).filter((r: any) => {
     if (typeof r.qsRank === "number") return r.qsRank <= 200;
-    return true; // if rank missing, keep but it's better model includes it
+    return true; // 没给 rank 也先保留（prompt 已强制要求返回）
   });
 
   return {
